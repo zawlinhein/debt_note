@@ -29,6 +29,13 @@
       "when": 1771921475276,
       "tag": "0003_military_wendell_rand",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1772031603549,
+      "tag": "0004_clumsy_khan",
+      "breakpoints": true
     }
   ]
 }

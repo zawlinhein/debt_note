@@ -7,6 +7,7 @@ import Link from "next/link";
 import RecordPaymentForm from "@/components/RecordPaymentForm";
 import DeletePaymentButton from "@/components/DeletePaymentButton";
 import DeleteFriendButton from "@/components/DeleteFriendButton";
+import DiscordIdForm from "@/components/DiscordIdForm";
 import { ArrowLeft } from "lucide-react";
 
 export default async function FriendDetailPage({
@@ -54,9 +55,7 @@ export default async function FriendDetailPage({
         </Link>
         <div className="flex-1">
           <h1 className="text-xl font-bold">{friend.name}</h1>
-          {friend.discordId && (
-            <p className="text-xs text-gray-400">Discord: {friend.discordId}</p>
-          )}
+          <DiscordIdForm friendId={friendId} currentDiscordId={friend.discordId} />
         </div>
       </div>
 

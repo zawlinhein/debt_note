@@ -2,13 +2,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Home, PlusCircle, Users, LayoutGrid, LogOut } from "lucide-react";
+import { Home, PlusCircle, Users, LayoutGrid, Settings, LogOut } from "lucide-react";
 
 const links = [
   { href: "/", label: "Home", icon: Home },
   { href: "/purchases/new", label: "Add", icon: PlusCircle },
   { href: "/friends", label: "Friends", icon: Users },
   { href: "/groups", label: "Groups", icon: LayoutGrid },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export default function BottomNav() {
