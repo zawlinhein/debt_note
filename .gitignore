@@ -10,6 +10,13 @@
 !.yarn/releases
 !.yarn/versions
 
+# AI Agent / IDE Folders
+.claude/
+.opencode/
+.codex/
+.cursor/
+.aider/
+
 # testing
 /coverage
 
@@ -32,6 +39,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
