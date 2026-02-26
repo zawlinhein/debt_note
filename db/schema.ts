@@ -17,6 +17,7 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  discordId: text("discord_id").unique(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -30,6 +31,7 @@ export const friends = pgTable("friends", {
   id: serial("id").primaryKey(),
   name: text("name").notNull().unique(),
   discordId: text("discord_id").unique(),
+  settledAt: timestamp("settled_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

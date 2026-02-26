@@ -6,8 +6,8 @@ import {
   verifyKey,
 } from "discord-interactions";
 import { db } from "@/db";
-import { friends, debts, payments } from "@/db/schema";
-import { eq, sum } from "drizzle-orm";
+import { friends, debts, payments, users } from "@/db/schema";
+import { eq, sum, and, gt } from "drizzle-orm";
 
 // ─── Discord signature verification ──────────────────────────────────────────
 
@@ -51,19 +51,162 @@ async function getFriendByDiscordId(discordId: string) {
   });
 }
 
-async function getFriendBalance(friendId: number) {
-  const [owed] = await db
-    .select({ total: sum(debts.amount) })
-    .from(debts)
-    .where(eq(debts.friendId, friendId));
-  const [paid] = await db
+// ─── FIFO unpaid debts calculation ────────────────────────────────────────────
+
+interface UnpaidItem {
+  date: string;
+  title: string;
+  originalAmount: number;
+  remaining: number;
+  partial: boolean;
+}
+
+async function getUnpaidDebts(friendId: number): Promise<{
+  items: UnpaidItem[];
+  totalRemaining: number;
+}> {
+  // Get the friend's settled_at marker
+  const friend = await db.query.friends.findFirst({
+    where: eq(friends.id, friendId),
+  });
+  const settledAt = friend?.settledAt ?? null;
+
+  // Build conditions: only fetch debts/payments after the settlement point
+  const debtConditions = settledAt
+    ? and(eq(debts.friendId, friendId), gt(debts.createdAt, settledAt))
+    : eq(debts.friendId, friendId);
+
+  const paymentConditions = settledAt
+    ? and(eq(payments.friendId, friendId), gt(payments.createdAt, settledAt))
+    : eq(payments.friendId, friendId);
+
+  // Fetch debts with purchase info, ordered by purchase date ASC (FIFO)
+  const friendDebts = await db.query.debts.findMany({
+    where: debtConditions,
+    with: { purchase: true },
+    orderBy: (d, { asc }) => [asc(d.createdAt)],
+  });
+
+  // Get total payments since settlement
+  const [paidResult] = await db
     .select({ total: sum(payments.amount) })
     .from(payments)
-    .where(eq(payments.friendId, friendId));
+    .where(paymentConditions);
 
-  const totalOwed = Number(owed?.total ?? 0);
-  const totalPaid = Number(paid?.total ?? 0);
-  return { totalOwed, totalPaid, remaining: totalOwed - totalPaid };
+  let totalPaid = Number(paidResult?.total ?? 0);
+
+  // Walk debts FIFO, subtracting payments
+  const items: UnpaidItem[] = [];
+  let totalRemaining = 0;
+
+  for (const d of friendDebts) {
+    const debtAmount = Number(d.amount);
+
+    if (totalPaid >= debtAmount) {
+      // This debt is fully covered by payments
+      totalPaid -= debtAmount;
+      continue;
+    }
+
+    // This debt is partially or fully unpaid
+    const remaining = debtAmount - totalPaid;
+    const partial = totalPaid > 0;
+    totalPaid = 0;
+
+    items.push({
+      date: d.purchase.date,
+      title: d.purchase.title,
+      originalAmount: debtAmount,
+      remaining,
+      partial,
+    });
+
+    totalRemaining += remaining;
+  }
+
+  return { items, totalRemaining };
+}
+
+function formatUnpaidList(items: UnpaidItem[]): string {
+  return items
+    .map(
+      (item) =>
+        `${item.date} · ${item.title} — ${item.remaining.toFixed(2)}${item.partial ? " (partially paid)" : ""}`,
+    )
+    .join("\n");
+}
+
+// ─── Settlement logic ─────────────────────────────────────────────────────────
+
+async function trySettle(friendId: number): Promise<boolean> {
+  const { totalRemaining } = await getUnpaidDebts(friendId);
+  if (totalRemaining === 0) {
+    await db
+      .update(friends)
+      .set({ settledAt: new Date() })
+      .where(eq(friends.id, friendId));
+    return true;
+  }
+  return false;
+}
+
+// ─── DM the admin ─────────────────────────────────────────────────────────────
+
+async function dmAdmin(message: string): Promise<boolean> {
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  if (!botToken) {
+    console.error("DISCORD_BOT_TOKEN not set, cannot DM admin");
+    return false;
+  }
+
+  // Get admin's Discord ID from the users table
+  const admin = await db.query.users.findFirst();
+  if (!admin?.discordId) {
+    console.error("Admin Discord ID not configured");
+    return false;
+  }
+
+  try {
+    // Create DM channel
+    const channelRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bot ${botToken}`,
+      },
+      body: JSON.stringify({ recipient_id: admin.discordId }),
+    });
+
+    if (!channelRes.ok) {
+      console.error(`Failed to create DM channel: ${channelRes.status}`);
+      return false;
+    }
+
+    const channel = await channelRes.json();
+
+    // Send message
+    const msgRes = await fetch(
+      `https://discord.com/api/v10/channels/${channel.id}/messages`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bot ${botToken}`,
+        },
+        body: JSON.stringify({ content: message }),
+      },
+    );
+
+    if (!msgRes.ok) {
+      console.error(`Failed to send DM: ${msgRes.status}`);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error("Failed to DM admin:", err);
+    return false;
+  }
 }
 
 // ─── Command handlers ────────────────────────────────────────────────────────
@@ -83,22 +226,45 @@ async function handlePay(
     return ephemeral("Please provide a valid positive amount.");
   }
 
-  // Record the payment
-  const [payment] = await db
-    .insert(payments)
-    .values({
-      friendId: friend.id,
-      amount: amount.toFixed(2),
-      note: "Paid via Discord",
-      paidAt: new Date().toISOString().split("T")[0],
-    })
-    .returning();
+  // Check remaining balance before recording
+  const { totalRemaining } = await getUnpaidDebts(friend.id);
 
-  const balance = await getFriendBalance(friend.id);
+  if (totalRemaining === 0) {
+    return ephemeral("You have no outstanding debts.");
+  }
+
+  if (amount > totalRemaining) {
+    return ephemeral(
+      `Your remaining balance is ${totalRemaining.toFixed(2)}. You cannot pay more than that.`,
+    );
+  }
+
+  // Record the payment
+  await db.insert(payments).values({
+    friendId: friend.id,
+    amount: amount.toFixed(2),
+    note: "Paid via Discord",
+    paidAt: new Date().toISOString().split("T")[0],
+  });
+
+  // Check if fully settled
+  const settled = await trySettle(friend.id);
+
+  if (settled) {
+    return ephemeral(
+      `Payment of ${amount.toFixed(2)} recorded. You're all settled up!`,
+    );
+  }
+
+  // Show remaining debts
+  const { items, totalRemaining: remaining } = await getUnpaidDebts(friend.id);
+  const list = formatUnpaidList(items);
 
   return ephemeral(
-    `Recorded payment of **$${Number(payment.amount).toFixed(2)}** from ${friend.name}.\n` +
-      `Remaining balance: **$${balance.remaining.toFixed(2)}**`,
+    `Payment of ${amount.toFixed(2)} recorded.\n\n` +
+      `Remaining debts:\n${list}\n` +
+      `─────\n` +
+      `Total remaining: ${remaining.toFixed(2)}`,
   );
 }
 
@@ -108,22 +274,98 @@ async function handleAsk(discordUserId: string) {
     return ephemeral("You're not authorized to use this bot.");
   }
 
-  const { totalOwed, totalPaid, remaining } = await getFriendBalance(friend.id);
+  const { items, totalRemaining } = await getUnpaidDebts(friend.id);
 
-  let status: string;
-  if (remaining > 0) {
-    status = `You owe **$${remaining.toFixed(2)}**`;
-  } else if (remaining < 0) {
-    status = `You are overpaid by **$${Math.abs(remaining).toFixed(2)}**`;
-  } else {
-    status = "You're all settled up!";
+  if (totalRemaining === 0) {
+    return ephemeral("You're all settled up! No outstanding debts.");
   }
 
+  const list = formatUnpaidList(items);
+
   return ephemeral(
-    `**${friend.name}'s Balance**\n` +
-      `Total owed: $${totalOwed.toFixed(2)}\n` +
-      `Total paid: $${totalPaid.toFixed(2)}\n` +
-      `${status}`,
+    `Your unpaid debts:\n${list}\n` +
+      `─────\n` +
+      `Total remaining: ${totalRemaining.toFixed(2)}`,
+  );
+}
+
+async function handleOwe(
+  discordUserId: string,
+  options: Array<{ name: string; value: unknown }>,
+) {
+  const friend = await getFriendByDiscordId(discordUserId);
+  if (!friend) {
+    return ephemeral("You're not authorized to use this bot.");
+  }
+
+  const amountOpt = options.find((o) => o.name === "amount");
+  const oweAmount = Number(amountOpt?.value);
+  if (!oweAmount || oweAmount <= 0) {
+    return ephemeral("Please provide a valid positive amount.");
+  }
+
+  const { totalRemaining } = await getUnpaidDebts(friend.id);
+
+  if (totalRemaining === 0) {
+    // Friend has no debt -- admin just owes them the full amount
+    await dmAdmin(
+      `**${friend.name}** says you owe them **${oweAmount.toFixed(2)}**. They have no outstanding debts.`,
+    );
+    return ephemeral(
+      `You have no outstanding debts.\n` +
+        `Admin has been notified that they owe you ${oweAmount.toFixed(2)}.`,
+    );
+  }
+
+  if (oweAmount >= totalRemaining) {
+    // Owe amount exceeds or equals remaining debt -- clear all debt
+    // Record payment only for the remaining debt amount to settle
+    await db.insert(payments).values({
+      friendId: friend.id,
+      amount: totalRemaining.toFixed(2),
+      note: "Owed via Discord",
+      paidAt: new Date().toISOString().split("T")[0],
+    });
+
+    await trySettle(friend.id);
+
+    const excess = oweAmount - totalRemaining;
+
+    if (excess > 0) {
+      await dmAdmin(
+        `**${friend.name}** says you owe them **${excess.toFixed(2)}**. ` +
+          `Their previous debt of ${totalRemaining.toFixed(2)} has been cleared.`,
+      );
+      return ephemeral(
+        `Your debt of ${totalRemaining.toFixed(2)} has been cleared.\n` +
+          `Admin has been notified that they owe you ${excess.toFixed(2)}.`,
+      );
+    }
+
+    // Exact match -- debt fully cleared, no excess
+    return ephemeral(
+      `Your debt of ${totalRemaining.toFixed(2)} has been cleared. You're all settled up!`,
+    );
+  }
+
+  // Owe amount is less than remaining debt -- partial offset
+  await db.insert(payments).values({
+    friendId: friend.id,
+    amount: oweAmount.toFixed(2),
+    note: "Owed via Discord",
+    paidAt: new Date().toISOString().split("T")[0],
+  });
+
+  await trySettle(friend.id);
+
+  const { items, totalRemaining: remaining } = await getUnpaidDebts(friend.id);
+  const list = formatUnpaidList(items);
+
+  return ephemeral(
+    `Recorded: ${oweAmount.toFixed(2)} offset from your balance.\n\n` +
+      `Remaining debts:\n${list}\n` +
+      `─────\n` +
+      `Total remaining: ${remaining.toFixed(2)}`,
   );
 }
 
@@ -161,6 +403,8 @@ export async function POST(req: NextRequest) {
         return handlePay(discordUserId, options);
       case "ask":
         return handleAsk(discordUserId);
+      case "owe":
+        return handleOwe(discordUserId, options);
       default:
         return ephemeral(`Unknown command: /${commandName}`);
     }

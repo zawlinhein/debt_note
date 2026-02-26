@@ -36,6 +36,13 @@
       "when": 1772031603549,
       "tag": "0004_clumsy_khan",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1772123676359,
+      "tag": "0005_clean_micromacro",
+      "breakpoints": true
     }
   ]
 }

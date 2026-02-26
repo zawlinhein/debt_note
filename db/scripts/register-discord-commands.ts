@@ -38,6 +38,20 @@ const commands = [
     description: "Check your current balance",
     type: 1, // CHAT_INPUT
   },
+  {
+    name: "owe",
+    description: "Record an amount the admin owes you",
+    type: 1, // CHAT_INPUT
+    options: [
+      {
+        name: "amount",
+        description: "Amount the admin owes you (e.g. 20.00)",
+        type: 10, // NUMBER
+        required: true,
+        min_value: 0.01,
+      },
+    ],
+  },
 ];
 
 async function main() {
@@ -47,7 +61,7 @@ async function main() {
     : `https://discord.com/api/v10/applications/${APP_ID}/commands`;
 
   console.log(
-    `Registering ${commands.length} commands ${GUILD_ID ? `for guild ${GUILD_ID}` : "globally"}...`
+    `Registering ${commands.length} commands ${GUILD_ID ? `for guild ${GUILD_ID}` : "globally"}...`,
   );
 
   const res = await fetch(url, {
