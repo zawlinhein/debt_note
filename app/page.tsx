@@ -50,7 +50,7 @@ export default async function DashboardPage() {
           Total outstanding
         </p>
         <p className="text-3xl font-bold text-gray-900">
-          {grandTotal.toFixed(2)}
+          {grandTotal.toFixed(0)}
         </p>
       </div>
 
@@ -84,12 +84,12 @@ export default async function DashboardPage() {
                         : "text-green-500"
                   }`}
                 >
-                  {f.remaining.toFixed(2)}
+                  {f.remaining.toFixed(0)}
                 </span>
               </div>
               <div className="flex gap-4 mt-1 text-xs text-gray-400">
-                <span>Owed {f.totalOwed.toFixed(2)}</span>
-                <span>Paid {f.totalPaid.toFixed(2)}</span>
+                <span>Owed {f.totalOwed.toFixed(0)}</span>
+                <span>Paid {f.totalPaid.toFixed(0)}</span>
               </div>
             </Link>
           ))}

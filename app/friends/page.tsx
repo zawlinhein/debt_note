@@ -43,7 +43,7 @@ export default async function FriendsPage() {
                   f.remaining > 0 ? "text-orange-500" : f.remaining < 0 ? "text-indigo-500" : "text-green-500"
                 }`}
               >
-                {f.remaining.toFixed(2)}
+                {f.remaining.toFixed(0)}
               </span>
             </Link>
           ))}

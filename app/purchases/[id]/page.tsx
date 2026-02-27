@@ -93,7 +93,7 @@ export default async function PurchaseDetailPage({
                 Total
               </td>
               <td className="px-4 py-2 text-right font-bold">
-                {Number(purchase.total).toFixed(2)}
+                {Number(purchase.total).toFixed(0)}
               </td>
             </tr>
           </tfoot>
@@ -107,7 +107,7 @@ export default async function PurchaseDetailPage({
             Split {purchase.debts.length + 1} ways &mdash; each{" "}
             <span className="font-bold">
               {purchase.debts[0]
-                ? Number(purchase.debts[0].amount).toFixed(2)
+                ? Number(purchase.debts[0].amount).toFixed(0)
                 : "—"}
             </span>
           </p>
@@ -131,7 +131,7 @@ export default async function PurchaseDetailPage({
                 {d.friend.name}
               </Link>
               <span className="text-sm font-semibold text-orange-500">
-                owes {Number(d.amount).toFixed(2)}
+                owes {Number(d.amount).toFixed(0)}
               </span>
             </div>
           ))}

@@ -65,13 +65,13 @@ export default async function FriendDetailPage({
           <div>
             <p className="text-xs text-gray-400 mb-1">Owed</p>
             <p className="font-semibold text-gray-800">
-              {totalOwed.toFixed(2)}
+              {totalOwed.toFixed(0)}
             </p>
           </div>
           <div>
             <p className="text-xs text-gray-400 mb-1">Paid</p>
             <p className="font-semibold text-green-600">
-              {totalPaid.toFixed(2)}
+              {totalPaid.toFixed(0)}
             </p>
           </div>
           <div>
@@ -79,7 +79,7 @@ export default async function FriendDetailPage({
             <p
               className={`font-bold text-lg ${remaining > 0 ? "text-orange-500" : remaining < 0 ? "text-indigo-500" : "text-green-500"}`}
             >
-              {remaining.toFixed(2)}
+              {remaining.toFixed(0)}
             </p>
           </div>
         </div>
@@ -108,7 +108,7 @@ export default async function FriendDetailPage({
                   <p className="text-xs text-gray-400">{d.purchase.date}</p>
                 </div>
                 <span className="text-sm font-semibold text-orange-500">
-                  {Number(d.amount).toFixed(2)}
+                  {Number(d.amount).toFixed(0)}
                 </span>
               </Link>
             ))}
@@ -132,7 +132,7 @@ export default async function FriendDetailPage({
               >
                 <div>
                   <p className="text-sm font-semibold text-green-600">
-                    +{Number(p.amount).toFixed(2)}
+                    +{Number(p.amount).toFixed(0)}
                   </p>
                   <p className="text-xs text-gray-400">
                     {p.paidAt}

@@ -2,17 +2,17 @@
  * Shared business logic helpers
  */
 
-/** Round a number up to 2 decimal places (ceiling per cent) */
-export function ceilCents(value: number): number {
-  return Math.ceil(value * 100) / 100;
+/** Round a number to the nearest integer */
+export function roundInt(value: number): number {
+  return Math.round(value);
 }
 
-/** Compute per-person share: total / n participants, ceiling rounded */
+/** Compute per-person share: total / n participants, rounded to nearest integer */
 export function perPersonShare(total: number, nParticipants: number): number {
-  return ceilCents(total / nParticipants);
+  return roundInt(total / nParticipants);
 }
 
-/** Format a numeric string or number to 2dp display */
+/** Format a numeric string or number as a whole integer (no decimals) */
 export function fmt(value: string | number): string {
-  return Number(value).toFixed(2);
+  return Math.round(Number(value)).toFixed(0);
 }

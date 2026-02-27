@@ -254,7 +254,7 @@ export default function PurchaseForm({ initialData }: PurchaseFormProps) {
         {/* Running total */}
         <div className="mt-3 flex justify-between text-sm font-medium border-t border-gray-100 pt-2">
           <span>Total</span>
-          <span>{total.toFixed(2)}</span>
+          <span>{total.toFixed(0)}</span>
         </div>
       </div>
 
@@ -308,7 +308,7 @@ export default function PurchaseForm({ initialData }: PurchaseFormProps) {
         {selectedFriendIds.size > 0 && (
           <p className="mt-3 text-sm text-gray-500">
             {nParticipants} people &mdash; each pays{" "}
-            <span className="font-semibold text-gray-800">{share.toFixed(2)}</span>
+            <span className="font-semibold text-gray-800">{share.toFixed(0)}</span>
           </p>
         )}
       </div>

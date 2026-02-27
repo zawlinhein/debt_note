@@ -131,7 +131,7 @@ function formatUnpaidList(items: UnpaidItem[]): string {
   return items
     .map(
       (item) =>
-        `${item.date} · ${item.title} — ${item.remaining.toFixed(2)}${item.partial ? " (partially paid)" : ""}`,
+        `${item.date} · ${item.title} — ${item.remaining.toFixed(0)}${item.partial ? " (partially paid)" : ""}`,
     )
     .join("\n");
 }
@@ -235,7 +235,7 @@ async function handlePay(
 
   if (amount > totalRemaining) {
     return ephemeral(
-      `Your remaining balance is ${totalRemaining.toFixed(2)}. You cannot pay more than that.`,
+      `Your remaining balance is ${totalRemaining.toFixed(0)}. You cannot pay more than that.`,
     );
   }
 
@@ -252,7 +252,7 @@ async function handlePay(
 
   if (settled) {
     return ephemeral(
-      `Payment of ${amount.toFixed(2)} recorded. You're all settled up!`,
+      `Payment of ${amount.toFixed(0)} recorded. You're all settled up!`,
     );
   }
 
@@ -261,10 +261,10 @@ async function handlePay(
   const list = formatUnpaidList(items);
 
   return ephemeral(
-    `Payment of ${amount.toFixed(2)} recorded.\n\n` +
+    `Payment of ${amount.toFixed(0)} recorded.\n\n` +
       `Remaining debts:\n${list}\n` +
       `─────\n` +
-      `Total remaining: ${remaining.toFixed(2)}`,
+      `Total remaining: ${remaining.toFixed(0)}`,
   );
 }
 
@@ -285,7 +285,7 @@ async function handleAsk(discordUserId: string) {
   return ephemeral(
     `Your unpaid debts:\n${list}\n` +
       `─────\n` +
-      `Total remaining: ${totalRemaining.toFixed(2)}`,
+      `Total remaining: ${totalRemaining.toFixed(0)}`,
   );
 }
 
@@ -309,11 +309,11 @@ async function handleOwe(
   if (totalRemaining === 0) {
     // Friend has no debt -- admin just owes them the full amount
     await dmAdmin(
-      `**${friend.name}** says you owe them **${oweAmount.toFixed(2)}**. They have no outstanding debts.`,
+      `**${friend.name}** says you owe them **${oweAmount.toFixed(0)}**. They have no outstanding debts.`,
     );
     return ephemeral(
       `You have no outstanding debts.\n` +
-        `Admin has been notified that they owe you ${oweAmount.toFixed(2)}.`,
+        `Admin has been notified that they owe you ${oweAmount.toFixed(0)}.`,
     );
   }
 
@@ -333,18 +333,18 @@ async function handleOwe(
 
     if (excess > 0) {
       await dmAdmin(
-        `**${friend.name}** says you owe them **${excess.toFixed(2)}**. ` +
-          `Their previous debt of ${totalRemaining.toFixed(2)} has been cleared.`,
+        `**${friend.name}** says you owe them **${excess.toFixed(0)}**. ` +
+          `Their previous debt of ${totalRemaining.toFixed(0)} has been cleared.`,
       );
       return ephemeral(
-        `Your debt of ${totalRemaining.toFixed(2)} has been cleared.\n` +
-          `Admin has been notified that they owe you ${excess.toFixed(2)}.`,
+        `Your debt of ${totalRemaining.toFixed(0)} has been cleared.\n` +
+          `Admin has been notified that they owe you ${excess.toFixed(0)}.`,
       );
     }
 
     // Exact match -- debt fully cleared, no excess
     return ephemeral(
-      `Your debt of ${totalRemaining.toFixed(2)} has been cleared. You're all settled up!`,
+      `Your debt of ${totalRemaining.toFixed(0)} has been cleared. You're all settled up!`,
     );
   }
 
@@ -362,10 +362,10 @@ async function handleOwe(
   const list = formatUnpaidList(items);
 
   return ephemeral(
-    `Recorded: ${oweAmount.toFixed(2)} offset from your balance.\n\n` +
+    `Recorded: ${oweAmount.toFixed(0)} offset from your balance.\n\n` +
       `Remaining debts:\n${list}\n` +
       `─────\n` +
-      `Total remaining: ${remaining.toFixed(2)}`,
+      `Total remaining: ${remaining.toFixed(0)}`,
   );
 }
 
