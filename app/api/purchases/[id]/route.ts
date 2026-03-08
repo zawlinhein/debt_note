@@ -7,7 +7,7 @@ import {
   debts,
 } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { perPersonShare } from "@/lib/math";
+import { computeDebts } from "@/lib/math";
 import { updatePurchaseSchema } from "@/lib/validations";
 import { requireAuth } from "@/lib/auth";
 
@@ -51,14 +51,16 @@ export async function PUT(
     );
   }
 
-  const { title, note, date, lineItemsInput, friendIds } = parsed.data;
+  const { title, note, date, lineItemsInput, friendIds, splitMethod, splitValues } =
+    parsed.data;
 
   const total = lineItemsInput.reduce(
     (sum, item) => sum + item.quantity * item.unitPrice,
     0
   );
-  const nParticipants = friendIds.length + 1;
-  const share = perPersonShare(total, nParticipants);
+
+  // Compute per-friend debt amounts based on split method
+  const friendDebtMap = computeDebts(total, friendIds, splitMethod, splitValues);
 
   // Update purchase
   await db
@@ -92,13 +94,13 @@ export async function PUT(
     friendIds.map((fid) => ({ purchaseId, friendId: fid }))
   );
 
-  // Replace debts
+  // Replace debts (per-friend amounts vary by split method)
   await db.delete(debts).where(eq(debts.purchaseId, purchaseId));
   await db.insert(debts).values(
     friendIds.map((fid) => ({
       purchaseId,
       friendId: fid,
-      amount: share.toFixed(2),
+      amount: (friendDebtMap[fid] ?? 0).toFixed(2),
     }))
   );
 

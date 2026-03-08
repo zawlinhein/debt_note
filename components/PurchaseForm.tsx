@@ -1,7 +1,11 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { perPersonShare } from "@/lib/math";
+import {
+  perPersonShare,
+  computeDebts,
+  type SplitMethod,
+} from "@/lib/math";
 
 interface LineItemRow {
   id: string; // local key
@@ -32,6 +36,12 @@ interface PurchaseFormProps {
   };
 }
 
+const SPLIT_METHODS: { value: SplitMethod; label: string }[] = [
+  { value: "equal", label: "Equal" },
+  { value: "percentage", label: "Percentage" },
+  { value: "ratio", label: "Ratio" },
+];
+
 export default function PurchaseForm({ initialData }: PurchaseFormProps) {
   const router = useRouter();
   const isEdit = !!initialData;
@@ -59,6 +69,11 @@ export default function PurchaseForm({ initialData }: PurchaseFormProps) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Split method state
+  const [splitMethod, setSplitMethod] = useState<SplitMethod>("equal");
+  // splitValues maps "you" | friendId-as-string -> number (percent or ratio)
+  const [splitValues, setSplitValues] = useState<Record<string, number>>({});
+
   useEffect(() => {
     Promise.all([
       fetch("/api/friends").then((r) => r.json()),
@@ -69,6 +84,48 @@ export default function PurchaseForm({ initialData }: PurchaseFormProps) {
     });
   }, []);
 
+  // When split method changes, reset split values with sensible defaults
+  useEffect(() => {
+    if (splitMethod === "equal") {
+      setSplitValues({});
+      return;
+    }
+    const participantKeys = ["you", ...Array.from(selectedFriendIds).map(String)];
+    const n = participantKeys.length;
+    if (splitMethod === "percentage") {
+      const even = Math.round((100 / n) * 100) / 100;
+      const vals: Record<string, number> = {};
+      participantKeys.forEach((k) => (vals[k] = even));
+      setSplitValues(vals);
+    } else if (splitMethod === "ratio") {
+      const vals: Record<string, number> = {};
+      participantKeys.forEach((k) => (vals[k] = 1));
+      setSplitValues(vals);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [splitMethod]);
+
+  // When friends change while in non-equal mode, update split values
+  useEffect(() => {
+    if (splitMethod === "equal") return;
+    setSplitValues((prev) => {
+      const next: Record<string, number> = {};
+      const participantKeys = ["you", ...Array.from(selectedFriendIds).map(String)];
+      for (const k of participantKeys) {
+        if (k in prev) {
+          next[k] = prev[k];
+        } else {
+          // New participant: default value
+          next[k] = splitMethod === "percentage"
+            ? Math.round((100 / participantKeys.length) * 100) / 100
+            : 1;
+        }
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFriendIds, splitMethod]);
+
   // Computed totals
   const total = lineItems.reduce((sum, li) => {
     const qty = parseFloat(li.quantity) || 0;
@@ -77,8 +134,29 @@ export default function PurchaseForm({ initialData }: PurchaseFormProps) {
   }, 0);
 
   const nParticipants = selectedFriendIds.size + 1; // friends + you
-  const share =
+
+  // Compute debts preview using the selected method
+  const friendDebts = useMemo(() => {
+    if (selectedFriendIds.size === 0) return {};
+    const friendIds = Array.from(selectedFriendIds);
+    return computeDebts(total, friendIds, splitMethod, splitValues);
+  }, [total, selectedFriendIds, splitMethod, splitValues]);
+
+  // For percentage mode: sum validation
+  const percentageSum = useMemo(() => {
+    if (splitMethod !== "percentage") return 0;
+    return Object.values(splitValues).reduce((s, v) => s + v, 0);
+  }, [splitMethod, splitValues]);
+
+  const percentageValid = splitMethod !== "percentage" || Math.abs(percentageSum - 100) < 0.01;
+
+  // For equal mode: keep the old simple share display
+  const equalShare =
     selectedFriendIds.size > 0 ? perPersonShare(total, nParticipants) : 0;
+
+  function updateSplitValue(key: string, value: number) {
+    setSplitValues((prev) => ({ ...prev, [key]: value }));
+  }
 
   function addLineItem() {
     setLineItems((prev) => [
@@ -123,9 +201,16 @@ export default function PurchaseForm({ initialData }: PurchaseFormProps) {
       return setError("All line items need a name and price");
     if (selectedFriendIds.size === 0)
       return setError("Select at least one friend");
+    if (splitMethod === "percentage" && !percentageValid)
+      return setError("Percentages must sum to 100%");
+    if (
+      splitMethod === "ratio" &&
+      Object.values(splitValues).some((v) => !v || v <= 0)
+    )
+      return setError("All ratios must be positive numbers");
 
     setSaving(true);
-    const payload = {
+    const payload: Record<string, unknown> = {
       title,
       note,
       date,
@@ -135,7 +220,11 @@ export default function PurchaseForm({ initialData }: PurchaseFormProps) {
         unitPrice: parseFloat(li.unitPrice) || 0,
       })),
       friendIds: Array.from(selectedFriendIds),
+      splitMethod,
     };
+    if (splitMethod !== "equal") {
+      payload.splitValues = splitValues;
+    }
 
     const url = isEdit
       ? `/api/purchases/${initialData!.id}`
@@ -158,6 +247,19 @@ export default function PurchaseForm({ initialData }: PurchaseFormProps) {
     router.push(`/purchases/${data.id}`);
     router.refresh();
   }
+
+  /** Get the name for a participant key */
+  function participantName(key: string): string {
+    if (key === "you") return "You";
+    const f = friends.find((fr) => String(fr.id) === key);
+    return f?.name ?? key;
+  }
+
+  /** All participant keys in order: you first, then selected friends */
+  const participantKeys = useMemo(
+    () => ["you", ...Array.from(selectedFriendIds).map(String)],
+    [selectedFriendIds]
+  );
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -228,7 +330,7 @@ export default function PurchaseForm({ initialData }: PurchaseFormProps) {
                   onChange={(e) => updateLineItem(li.id, "unitPrice", e.target.value)}
                 />
                 <div className="w-16 text-right text-sm text-gray-500 py-2">
-                  {subtotal > 0 ? subtotal.toFixed(2) : "—"}
+                  {subtotal > 0 ? subtotal.toFixed(2) : "\u2014"}
                 </div>
                 {lineItems.length > 1 && (
                   <button
@@ -236,7 +338,7 @@ export default function PurchaseForm({ initialData }: PurchaseFormProps) {
                     onClick={() => removeLineItem(li.id)}
                     className="text-gray-300 hover:text-red-400 py-2 px-1 text-lg"
                   >
-                    ×
+                    &times;
                   </button>
                 )}
               </div>
@@ -261,6 +363,24 @@ export default function PurchaseForm({ initialData }: PurchaseFormProps) {
       {/* Participants */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">Split with</label>
+
+        {/* Split method toggle */}
+        <div className="inline-flex rounded-lg bg-gray-100 p-0.5 mb-3">
+          {SPLIT_METHODS.map((m) => (
+            <button
+              key={m.value}
+              type="button"
+              onClick={() => setSplitMethod(m.value)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                splitMethod === m.value
+                  ? "bg-white text-indigo-700 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
 
         {/* Groups quick-add */}
         {groups.length > 0 && (
@@ -298,18 +418,81 @@ export default function PurchaseForm({ initialData }: PurchaseFormProps) {
                 }`}
               >
                 {f.name}
-                {selected && " ×"}
+                {selected && " \u00d7"}
               </button>
             );
           })}
         </div>
 
-        {/* Per-person share */}
+        {/* Split values inputs for percentage and ratio modes */}
+        {splitMethod !== "equal" && selectedFriendIds.size > 0 && (
+          <div className="mt-3 space-y-2">
+            {participantKeys.map((key) => {
+              const debtAmount = key === "you" ? null : friendDebts[Number(key)];
+              return (
+                <div key={key} className="flex items-center gap-2">
+                  <span className={`text-sm w-24 truncate ${key === "you" ? "font-medium text-indigo-600" : "text-gray-700"}`}>
+                    {participantName(key)}
+                  </span>
+                  <div className="relative flex-1 max-w-32">
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={splitValues[key] ?? ""}
+                      onChange={(e) =>
+                        updateSplitValue(key, parseFloat(e.target.value) || 0)
+                      }
+                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-right pr-8 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+                      {splitMethod === "percentage" ? "%" : "\u00d7"}
+                    </span>
+                  </div>
+                  {debtAmount != null && total > 0 && (
+                    <span className="text-xs text-gray-400 w-20 text-right">
+                      = {debtAmount.toFixed(0)}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Percentage sum indicator */}
+            {splitMethod === "percentage" && (
+              <p
+                className={`text-xs mt-1 ${
+                  percentageValid ? "text-green-600" : "text-red-500"
+                }`}
+              >
+                Total: {percentageSum.toFixed(1)}%
+                {percentageValid
+                  ? ""
+                  : percentageSum < 100
+                    ? ` \u2014 ${(100 - percentageSum).toFixed(1)}% remaining`
+                    : ` \u2014 ${(percentageSum - 100).toFixed(1)}% over`}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Per-person share preview */}
         {selectedFriendIds.size > 0 && (
-          <p className="mt-3 text-sm text-gray-500">
-            {nParticipants} people &mdash; each pays{" "}
-            <span className="font-semibold text-gray-800">{share.toFixed(0)}</span>
-          </p>
+          <div className="mt-3">
+            {splitMethod === "equal" ? (
+              <p className="text-sm text-gray-500">
+                {nParticipants} people &mdash; each pays{" "}
+                <span className="font-semibold text-gray-800">
+                  {equalShare.toFixed(0)}
+                </span>
+              </p>
+            ) : (
+              <p className="text-sm text-gray-500">
+                {nParticipants} people &mdash; split by{" "}
+                {splitMethod === "percentage" ? "percentage" : "ratio"}
+              </p>
+            )}
+          </div>
         )}
       </div>
 

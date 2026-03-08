@@ -103,14 +103,25 @@ export default async function PurchaseDetailPage({
       {/* Split */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100">
-          <p className="text-sm font-medium text-gray-700">
-            Split {purchase.debts.length + 1} ways &mdash; each{" "}
-            <span className="font-bold">
-              {purchase.debts[0]
-                ? Number(purchase.debts[0].amount).toFixed(0)
-                : "—"}
-            </span>
-          </p>
+          {(() => {
+            const amounts = purchase.debts.map((d) => Number(d.amount));
+            const allEqual =
+              amounts.length > 0 &&
+              amounts.every((a) => Math.abs(a - amounts[0]) < 0.01);
+            return (
+              <p className="text-sm font-medium text-gray-700">
+                Split {purchase.debts.length + 1} ways
+                {allEqual && (
+                  <>
+                    {" "}&mdash; each{" "}
+                    <span className="font-bold">
+                      {amounts[0] ? amounts[0].toFixed(0) : "\u2014"}
+                    </span>
+                  </>
+                )}
+              </p>
+            );
+          })()}
         </div>
         <div className="divide-y divide-gray-50">
           {/* You */}

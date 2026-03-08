@@ -8,19 +8,49 @@ const lineItemSchema = z.object({
   unitPrice: z.number().nonnegative("Unit price cannot be negative"),
 });
 
+export const splitMethodEnum = z
+  .enum(["equal", "percentage", "ratio"])
+  .default("equal");
+
 // ─── Purchases ───────────────────────────────────────────────────────────────
 
-export const createPurchaseSchema = z.object({
-  title: z.string().min(1, "Title is required").transform((s) => s.trim()),
-  note: z.string().optional(),
-  date: z.string().min(1, "Date is required"),
-  lineItemsInput: z
-    .array(lineItemSchema)
-    .min(1, "At least one line item is required"),
-  friendIds: z
-    .array(z.number().int().positive())
-    .min(1, "At least one friend must participate"),
-});
+export const createPurchaseSchema = z
+  .object({
+    title: z.string().min(1, "Title is required").transform((s) => s.trim()),
+    note: z.string().optional(),
+    date: z.string().min(1, "Date is required"),
+    lineItemsInput: z
+      .array(lineItemSchema)
+      .min(1, "At least one line item is required"),
+    friendIds: z
+      .array(z.number().int().positive())
+      .min(1, "At least one friend must participate"),
+    splitMethod: splitMethodEnum,
+    // Maps participant key ("you" | friendId as string) to value (percent or ratio)
+    splitValues: z.record(z.string(), z.number()).optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.splitMethod === "percentage" && data.splitValues) {
+        const total = Object.values(data.splitValues).reduce(
+          (s, v) => s + v,
+          0
+        );
+        return Math.abs(total - 100) < 0.01;
+      }
+      return true;
+    },
+    { message: "Percentages must sum to 100%", path: ["splitValues"] }
+  )
+  .refine(
+    (data) => {
+      if (data.splitMethod === "ratio" && data.splitValues) {
+        return Object.values(data.splitValues).every((v) => v > 0);
+      }
+      return true;
+    },
+    { message: "All ratios must be positive numbers", path: ["splitValues"] }
+  );
 
 export const updatePurchaseSchema = createPurchaseSchema;
 
