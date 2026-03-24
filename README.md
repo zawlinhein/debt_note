@@ -1,36 +1,82 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DebtNote
 
-## Getting Started
+DebtNote is a personal web app for tracking shared purchases and repayments with friends.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Track purchases with receipt-style line items
+- Split costs with friends using:
+  - equal split
+  - percentage split
+  - ratio split
+- Organize friends into reusable groups
+- Record payments and track remaining balances
+- View friend-level history (purchases + payments)
+- Discord slash command integration for friend self-service (`/ask`, `/pay`, `/owe`)
+
+## Tech Stack
+
+- Next.js 16
+- TypeScript
+- PostgreSQL
+- Drizzle ORM + drizzle-kit
+- NextAuth
+- Tailwind CSS v4
+- Discord Interactions API
+
+## Requirements
+
+- Node.js 20+
+- Neon PostgreSQL database
+
+## Environment Variables
+
+Copy `.env.example` to `.env.local` (or `.env`) and fill in values:
+
+```env
+# Database (PostgreSQL)
+DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
+
+# Auth
+NEXTAUTH_SECRET=...
+NEXTAUTH_URL=http://localhost:3000
+
+# Discord Bot
+DISCORD_PUBLIC_KEY=...
+DISCORD_APP_ID=...
+DISCORD_BOT_TOKEN=...
+# Optional (faster command registration during development)
+# DISCORD_GUILD_ID=...
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Database & Scripts
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### App scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `npm run dev` - run development server
+- `npm run build` - build for production
+- `npm run start` - start production server
 
-## Learn More
+### Database scripts
 
-To learn more about Next.js, take a look at the following resources:
+- `npm run db:generate` - generate Drizzle migrations
+- `npm run db:migrate` - run migrations from `db/migrations`
+- `npm run db:push` - push schema directly to database
+- `npm run db:clear` - clear all app data and reset sequences
+- `npm run db:create-admin` - create default admin if missing
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Discord scripts
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `npm run discord:register` - register slash commands with Discord API
 
-## Deploy on Vercel
+## Discord Integration
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+DebtNote exposes a Discord interaction endpoint at:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `POST /api/discord`
+
+Supported slash commands:
+
+- `/ask` - show your current unpaid items and total
+- `/pay amount:<number>` - record a payment
+- `/owe amount:<number>` - report amount the admin owes you (or offset your debt)
