@@ -11,6 +11,7 @@ import {
   purchaseParticipants,
   debts,
   payments,
+  users,
 } from "../schema";
 
 export async function clearData() {
@@ -26,6 +27,7 @@ export async function clearData() {
   await db.delete(groupMembers);
   await db.delete(groups);
   await db.delete(friends);
+  await db.delete(users);
 
   // Reset sequences
   await db.execute(sql`ALTER SEQUENCE friends_id_seq RESTART WITH 1`);
@@ -35,6 +37,7 @@ export async function clearData() {
   await db.execute(sql`ALTER SEQUENCE purchase_participants_id_seq RESTART WITH 1`);
   await db.execute(sql`ALTER SEQUENCE debts_id_seq RESTART WITH 1`);
   await db.execute(sql`ALTER SEQUENCE payments_id_seq RESTART WITH 1`);
+  await db.execute(sql`ALTER SEQUENCE users_id_seq RESTART WITH 1`);
 
   console.log("All data cleared");
 }
